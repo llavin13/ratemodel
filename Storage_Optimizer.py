@@ -44,6 +44,10 @@ def storage_optimizer(data,name):
             nativeload_input[i] = hour_load[i]
             energycost_input[i] = hour_energycost[i]
             demandperiod_input[i] = hour_demandperiod[i]
+        if isinstance(data['Demand_Monthly'][0],str):
+            demandcost_monthly_input = 0
+        else:
+            demandcost_monthly_input = data['Demand_Monthly'].mean()
         if math.isnan(data['Demand_Daily'][(data['Demand_Daily_Period'] == 0)].mean()):
             demandcost0_input = 0
         else:
@@ -64,6 +68,7 @@ def storage_optimizer(data,name):
         SOCmax_input = power_input*4 #4 hour battery
         chargeEff_input = 1 
         dischargeEff_input = 1
+        RTEff_input = 0.81
         initOMax_input = 0 #just always 0
         depthDischarge_input = 0.2 #can't go below 20% SOC
         initSOC_input = SOCmax_input*depthDischarge_input #start at min SOC in first time period
@@ -84,6 +89,7 @@ def storage_optimizer(data,name):
         model.demandperiod = Param(model.T, initialize=demandperiod_input)
         #rates/costs
         model.energycost = Param(model.T, initialize=energycost_input) #energy cost is indexed by hour
+        model.demandcostmonthly = Param(initialize=demandcost_monthly_input)
         model.demandcost0 = Param(initialize=demandcost0_input) 
         model.demandcost1 = Param(initialize=demandcost1_input)
         model.demandcost2 = Param(initialize=demandcost2_input)
@@ -93,6 +99,7 @@ def storage_optimizer(data,name):
         model.SOCmax = Param(initialize=SOCmax_input) #scalar storage energy
         model.chargeEff = Param(initialize=chargeEff_input) #scalar Storage charge efficiency
         model.dischargeEff = Param(initialize=dischargeEff_input) # scalar discharge efficiency
+        model.RTEff = Param(initialize=RTEff_input) # scalar discharge efficiency
         model.initSOC = Param(within = NonNegativeReals, initialize=initSOC_input) # scalar Storage initial state
         model.initOMax = Param(initialize=initOMax_input) #initial Overall Max Load
         model.depthDischarge = Param(initialize=depthDischarge_input) #min SOC %
@@ -116,9 +123,9 @@ def storage_optimizer(data,name):
         
         def SOCRule(model, t):
             if t==0:
-                return (model.SOC[t] == model.initSOC + model.charge[t] - model.discharge[t])
+                return (model.SOC[t] == model.initSOC + model.charge[t]*(model.RTEff**.5) - model.discharge[t]/(model.RTEff**.5))
             else:
-                return (model.SOC[t] == model.SOC[t-1] + model.charge[t] - model.discharge[t])
+                return (model.SOC[t] == model.SOC[t-1] + model.charge[t]*(model.RTEff**.5) - model.discharge[t]/(model.RTEff**.5))
         model.SOCConst = Constraint(model.T, rule=SOCRule)
         
         def MaxLoadRule(model, t):
@@ -156,12 +163,12 @@ def storage_optimizer(data,name):
         model.Period3MaxLoadConst = Constraint(model.T, rule=Period3MaxLoadRule)
         
         ## Define Objective ##
-        
         def objective_rule(model):
           return (model.Period3MaxLoad*model.demandcost3 +
                   model.Period2MaxLoad*model.demandcost2 + 
                   model.Period1MaxLoad*model.demandcost1 + 
-                  model.OverallMaxLoad*model.demandcost0 + 
+                  model.OverallMaxLoad*model.demandcost0 +
+                  model.OverallMaxLoad*model.demandcostmonthly +
                   sum(model.NetLoad[t]*model.energycost[t] for t in model.T)) #this is the TotalCost
         model.objective = Objective(rule=objective_rule, sense=minimize) #says we should minimize objective fxn
         

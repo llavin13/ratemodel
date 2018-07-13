@@ -59,7 +59,7 @@ def rate_reshape(year, rateid, rates):
             output_rate[Energy_Period] = ''
             output_rate[Energy_Max] = ''
             
-    ### DEMAND AND CUSTOMER
+    ### DEMAND AND CUSTOMER ###
     output_rate['Demand_Monthly'] = ''
     output_rate['Demand_Monthly_Adj'] = ''
     output_rate['Demand_Daily'] = ''
@@ -149,14 +149,25 @@ def rate_reshape(year, rateid, rates):
                 output_rate.loc[i,'Demand_Monthly_Adj'] = 'flatdemandstructure/period' + str(output_rate.loc[i,'Demand_Monthly_Adj']) + '/tier0adj' 
                 output_rate.loc[i,'Demand_Monthly_Adj'] = rate_info[output_rate.loc[i,'Demand_Monthly_Adj']]
             except KeyError:
+                output_rate.loc[i,'Demand_Monthly_Adj'] = 0
+                pass
+            try:
+                if rate_info['flatdemandstructure/period' + str(int(demand_charge_mo[output_rate.loc[i,'Month']-1])) + '/tier1rate'] > output_rate.loc[i,'Demand_Monthly']:
+                    output_rate.loc[i,'Demand_Monthly'] = rate_info['flatdemandstructure/period' + str(int(demand_charge_mo[output_rate.loc[i,'Month']-1])) + '/tier1rate']
+                    try:
+                        output_rate.loc[i,'Demand_Monthly_Adj'] = rate_info['flatdemandstructure/period' + str(int(demand_charge_mo[output_rate.loc[i,'Month']-1])) + '/tier1adj']
+                    except KeyError:
+                        output_rate.loc[i,'Demand_Monthly_Adj'] = 0
+                        pass
+            except KeyError:
                 pass
     return output_rate
 
 
-
+### DOWN HERE IS JUST IN-SCRIPT TESTING ###
 # inputs for test case
 input_year = 2016
-input_rateid = 32532
+input_rateid = 43848
 
 ### RUN YOUR TEST CASE ###
 # check if it's already been pickled/saved, if not, go find it

@@ -23,12 +23,13 @@ rates = pd.read_csv(rates_path)
 # the inputs
 input_year = 2016
 input_peak_kW = 51
-input_utility = "Georgia Power Co"
+input_utility = "Consolidated Edison Co-NY Inc"
 input_sector = "Commercial"
 input_voltage = "Transmission"
 
 # Pacific Gas & Electric Co / Georgia Power Co / Baltimore Gas & Electric Co / Southern California Edison Co
 # Pennsylvania Electric Co (Pennsylvania) / Austin Energy / Duke Energy Carolinas, LLC
+#Consolidated Edison Co-NY Inc / Duquesne Light Co
 
 def rate_options(rates, year, peak_kW, utility, sector, voltage):
     # for the years
@@ -59,7 +60,7 @@ def rate_options(rates, year, peak_kW, utility, sector, voltage):
     return (rate_options)
 
 test_output = rate_options(rates, input_year, input_peak_kW, input_utility, input_sector, input_voltage)
-#print(test_output)
+print(test_output)
 # write this to a csv you can check, just for now
 test_output.to_csv('test.csv')
 

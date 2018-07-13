@@ -29,6 +29,7 @@ from Storage_Optimizer import storage_optimizer
 from Bill_Calculator import energy_bill_calc
 from Bill_Calculator import customer_bill_calc
 from Bill_Calculator import demand_bill_calc
+from Bill_Calculator import demand_bill_month_calc
 
 ## RAW DATA & FILE STRUCTURE ##
 cwd = os.getcwd()
@@ -37,30 +38,51 @@ data_path = join(cwd, 'data')
 rates_path = join(data_path, 'Raw_OpenEI_Rate_Data.csv')
 rates = pd.read_csv(rates_path)
 
+## READ IN CASE INPUTS FOR RUNNING SCRIPT ##
+case_path = join(data_path, 'case_input.csv')
+cases = pd.read_csv(case_path)
+#print (cases)
+
 ## CREATE LOOP ##
 #use for running multiple cases, be careful
-for rateid in [41327, 41385]:
+full_list = []
+for caseno in range(len(cases)):
 #PG&E ids include: 8978, 12896, 28446, 35604, 35673, 39055, 39056, 39058, 39059, 39075, 39954
 #39975, 41327, 41385, 42036
-    print ("running case for rateid " + str(rateid))
+#SCE includes: 38161, 38168, 38171, 38172, 38175, 38178, 38180, 38182, 38184, 38185, 38186, 38187, 38188, 38192
+#38194, 38196, 38197, 38200, 38202, 38204, 38219, 38230, 38231, 38232, 38235, 38241, 38243, 38245
+# looks like Mike used 38232 for his work
+#BG&E 1810, 12989, 15002, 15975, 23872, 35882, 43110
+#Duke 29363, 38393 sm, 38394 lg
+#Austin
+#PECO 38915, 38917, 38926, 38930
+#Georgia Power
+#OG&E
+#ConEd 6325, 21926, 35730, 35735, 35747, 39088, 39089, 39091, 39092, 39093, 39094, 39096
+#39110, 39111, 39113, 39114, 39116, 39117, 39118, 39120, 39265, 42021
+#DQL 13525, 34129, 35878
+    ## Tell user what you're running ##
+    print ("running case for rateid " + str(cases['rateid'][caseno]))
 
     ## LOAD ##
-    load = Load_Script.sanfrancisco_com #native
-    load_name = "PrimarySchoolNew2004" #select the column name of your chosen load shape
+    #load = Load_Script.losangeles_com #native load, wrong for now
+    load = eval("Load_Script." + str(cases['loadlocation'][caseno]))
+    load_name = cases['loadname'][caseno] #select the column name of your chosen load shape
     #convert to 8760
-    loads_2013 = load[load['Year'] == 2013]
+    loads_2013 = load[load['Year'] == cases['loadyear'][caseno]]
     Lg_Office_2013 = loads_2013[[load_name]]
     Lg_Office_2013_8760 = Lg_Office_2013.groupby(np.arange(len(Lg_Office_2013))//2).mean()
     
     ## CASE INPUTS ##
-    input_year = 2016
+    input_year = cases['rateyear'][caseno]
     input_peak_kW = Lg_Office_2013_8760.max()
-    input_utility = "Pacific Gas & Electric Co"
-    input_sector = "Commercial"
+    input_utility = "Pacific Gas & Electric Co" # not used unless you check rate options
+    input_sector = "Commercial" # not used unless you check rate options
     input_voltage = "Transmission"
-    input_rateid = rateid #must be kept consistent w prvs inputs 35673, 39059
-    input_CZ = 'CZ3A'
-    CZ_year = 2018.0
+    input_rateid = cases['rateid'][caseno]
+    CZ_sheet = cases['CZ_Sheet'][caseno]
+    input_CZ = cases['input_CZ'][caseno] #3A is SF, 6 and 8 are LA
+    CZ_year = float(cases['CZ_year'][caseno]) #this is a problem but leave for now
     order_magnitude = 1000
     months = list(range(1, 13))
     
@@ -109,7 +131,7 @@ for rateid in [41327, 41385]:
     ## AVOIDED COSTS ##
     
     #ok first the format is dumb so make the first column the headers
-    xls_path = join(data_path, 'PG&E by CZ_All.xlsx')
+    xls_path = join(data_path, CZ_sheet)
     xls = pd.ExcelFile(xls_path)
     CZ_AvoidedCosts = pd.read_excel(xls, input_CZ)
     CZ_AvoidedCosts.columns = CZ_AvoidedCosts.iloc[0]
@@ -131,10 +153,12 @@ for rateid in [41327, 41385]:
     native_energy = energy_bill_calc(full_df, load_name)
     native_customer = customer_bill_calc(full_df, load_name)
     native_demand = demand_bill_calc(full_df, load_name)
+    native_demand_2 = demand_bill_month_calc(full_df, load_name)
     
     net_energy = energy_bill_calc(full_df, "NetLoad")
     net_customer = customer_bill_calc(full_df, "NetLoad")
     net_demand = demand_bill_calc(full_df, "NetLoad")
+    net_demand_2 = demand_bill_month_calc(full_df, "NetLoad")
     
     ## GRAPHS/OUTPUTS ##
     
@@ -144,6 +168,7 @@ for rateid in [41327, 41385]:
     energy_delta = -np.array(net_energy) + np.array(native_energy)
     energy_delta = list(energy_delta)
     
+    # convert daily demand period charges into single monthly values
     native_demand_monthly = []
     net_demand_monthly = []
     val = len(net_demand)/12
@@ -155,7 +180,9 @@ for rateid in [41327, 41385]:
             net += net_demand[int(m*val+v)]
         native_demand_monthly.append(native)
         net_demand_monthly.append(net)
-    demand_delta = -np.array(net_demand_monthly) + np.array(native_demand_monthly)
+        
+    # for full delta add in the flat monthly demand charges
+    demand_delta = -np.array(net_demand_monthly) + np.array(native_demand_monthly) - np.array(net_demand_2) + np.array(native_demand_2)
     demand_delta = list(demand_delta)
        
     total_delta = np.array(demand_delta) + np.array(energy_delta)
@@ -214,9 +241,12 @@ for rateid in [41327, 41385]:
     bottom_plot.set_title(chart_title)
     plt.show()
     
-    full_df.to_csv('case_results.csv')
+    #full_df.to_csv('case_results.csv')
+    full_list.append(full_df)
     #writer = pd.ExcelWriter('Storage_case.xlsx')
     #full_df.to_excel(writer,'data_output')
     #writer.save()
+all_case_results_df = pd.concat(full_list)
+all_case_results_df.to_csv('all_case_results.csv')
 end_time = time.time() - start_time
 print ("time elapsed during run is " + str(end_time) + " seconds")
