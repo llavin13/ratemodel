@@ -46,6 +46,7 @@ cases = pd.read_csv(case_path)
 ## CREATE LOOP ##
 #use for running multiple cases, be careful
 full_list = []
+full_dict = {}
 for caseno in range(len(cases)):
 #PG&E ids include: 8978, 12896, 28446, 35604, 35673, 39055, 39056, 39058, 39059, 39075, 39954
 #39975, 41327, 41385, 42036
@@ -187,10 +188,16 @@ for caseno in range(len(cases)):
        
     total_delta = np.array(demand_delta) + np.array(energy_delta)
     total_delta = list(total_delta)
-        
+    
+    chart_title = full_df['Rate Name'].iloc[0] + ' ' + input_CZ + ' ' + str(int(CZ_year)) + ' -- ' + load_name + ' Load Shape'
+    if ':' in chart_title:
+        chart_title.replace(':', '-', 1)
+    title_list = 12*[chart_title]
+    
     # creation of dfs
     bill_results_df = pd.DataFrame(
-        {'month': months_str,
+        {'title': title_list,
+         'month': months_str,
          'month short': months_str_short,
          'delta energy bill': energy_delta,
          'native energy bill': native_energy,
@@ -198,6 +205,8 @@ for caseno in range(len(cases)):
          'delta demand bill': demand_delta,
          'native demand bill': native_demand_monthly,
          'net demand bill': net_demand_monthly,
+         'native demand bill flat': native_demand_2,
+         'net demand bill flat': net_demand_2,
          'native customer bill': native_customer,
          'net customer bill': net_customer,
          'avoided costs': monthly_avoided_costs,
@@ -236,17 +245,23 @@ for caseno in range(len(cases)):
     sns.despine(left=True)
     bottom_plot.set_ylabel("Monthly Bill Savings ($)")
     bottom_plot.set_xlabel("Month of Year")
-    chart_title = full_df['Rate Name'].iloc[0] + ' ' + input_CZ + ' ' + str(int(CZ_year)) + ' // ' + load_name + ' Load Shape'
-    #full_df.iloc[0,'Rate Name'] + ' ' +
+    
     bottom_plot.set_title(chart_title)
     plt.show()
     
-    #full_df.to_csv('case_results.csv')
-    full_list.append(full_df)
-    #writer = pd.ExcelWriter('Storage_case.xlsx')
-    #full_df.to_excel(writer,'data_output')
-    #writer.save()
+    #append only the billing outputs, since it'll be too much data to do everything
+    full_list.append(bill_results_df)
+    full_dict[chart_title] = full_df
+    #create dict of the other results
+
 all_case_results_df = pd.concat(full_list)
-all_case_results_df.to_csv('all_case_results.csv')
+output_path = join(cwd, 'output')
+output_csv_path = join(output_path,'bill_results.csv')
+all_case_results_df.to_csv(output_csv_path)
+
+for key in full_dict.keys():
+    output_csv_case_path = join(output_path,(str(key)+".csv"))
+    full_dict[key].to_csv(output_csv_case_path)
+#all_case_results_df.to_csv('all_case_results.csv')
 end_time = time.time() - start_time
 print ("time elapsed during run is " + str(end_time) + " seconds")
